@@ -1,25 +1,22 @@
 name: Sync Notes
 
 on:
-  repository_dispatch:
-    types: [update-notes]
+  push:
+    paths:
+      - "notes.json"
 
 permissions:
   contents: write
 
 jobs:
-  update:
+  sync:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Write notes.json
-        run: |
-          echo '${{ github.event.client_payload.notes }}' > notes.json
-
-      - name: Commit changes
+      - name: Commit notes.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
