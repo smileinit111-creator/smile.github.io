@@ -23,8 +23,8 @@ body{margin:0;font-family:Arial;}
 <div class="app">
   <div class="sidebar">
     <button onclick="createNote()">+ 新建</button>
-    <button onclick="syncGitHub()">☁ 同步</button>
-    <button onclick="exportJSON()">⬇ 导出</button>
+    <button onclick="downloadNotes()">⬇ 同步到GitHub（下载）</button>
+    <button onclick="exportJSON()">⬇ 导出JSON</button>
     <div id="list"></div>
   </div>
 
@@ -42,12 +42,12 @@ let notes = [];
 let currentId = null;
 let editor = null;
 
-/* ========== 本地存储 ========== */
+/* ================= 本地存储 ================= */
 function saveLocal(){
   localStorage.setItem("smile_notes", JSON.stringify(notes));
 }
 
-/* ========== 渲染 ========== */
+/* ================= 渲染 ================= */
 function renderList(){
   document.getElementById("list").innerHTML =
     notes.map(n =>
@@ -56,7 +56,7 @@ function renderList(){
     ).join("");
 }
 
-/* ========== 新建 ========== */
+/* ================= 新建 ================= */
 function createNote(){
   currentId = null;
   document.getElementById("title").value = "";
@@ -64,7 +64,7 @@ function createNote(){
   renderList();
 }
 
-/* ========== 打开 ========== */
+/* ================= 打开 ================= */
 function openNote(id){
   const n = notes.find(x=>x.id===id);
   if(!n) return;
@@ -74,7 +74,7 @@ function openNote(id){
   renderList();
 }
 
-/* ========== 保存 ========== */
+/* ================= 保存 ================= */
 function saveNote(){
   const title = document.getElementById("title").value;
   const content = editor.getValue();
@@ -92,12 +92,13 @@ function saveNote(){
   renderList();
 }
 
-/* ========== 导出 ========== */
+/* ================= 导出 JSON ================= */
 function exportJSON(){
   const blob = new Blob(
     [JSON.stringify(notes,null,2)],
     {type:"application/json"}
   );
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -105,38 +106,21 @@ function exportJSON(){
   a.click();
 }
 
-/* ========== ⭐ 核心：GitHub Actions 同步 ========== */
-async function syncGitHub(){
-
-  const res = await fetch(
-    "https://api.github.com/repos/smileinit111-creator/smile.github.io/dispatches",
-    {
-      method:"POST",
-      headers:{
-        "Accept":"application/vnd.github+json",
-        "Content-Type":"application/json"
-      },
-      body: JSON.stringify({
-        event_type: "update-notes",
-        client_payload: {
-          notes: JSON.stringify(notes)
-        }
-      })
-    }
-  );
-
-  if(res.ok){
-    alert("已触发同步（Actions运行中）");
-  }else{
-    alert("同步失败（检查Actions权限）");
-  }
+/* ================= ⭐ 新：GitHub同步方式 =================
+   ❗ 注意：浏览器不能直接 push
+   👉 改为下载 notes.json + 手动/自动上传 GitHub
+*/
+function downloadNotes(){
+  exportJSON();
+  alert("已下载 notes.json\n请上传到 GitHub 仓库根目录触发 Actions");
 }
 
-/* ========== 加载云端文件 ========== */
+/* ================= 加载云端 ================= */
 async function loadNotes(){
   try{
     const res = await fetch("./notes.json?t=" + Date.now());
     if(!res.ok) return;
+
     const data = await res.json();
     if(Array.isArray(data)){
       notes = data;
@@ -145,7 +129,7 @@ async function loadNotes(){
   }catch(e){}
 }
 
-/* ========== 初始化 ========== */
+/* ================= 初始化 ================= */
 window.onload = async () => {
 
   await loadNotes();
