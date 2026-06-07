@@ -1,0 +1,25 @@
+name: Sync Notes
+
+on:
+  repository_dispatch:
+    types: [update-notes]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Write notes.json
+        run: |
+          echo '${{ github.event.client_payload.notes }}' > notes.json
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add notes.json
+          git commit -m "update notes" || exit 0
+          git push
