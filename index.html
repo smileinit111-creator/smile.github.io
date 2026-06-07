@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smile Notes</title>
+
+<link rel="stylesheet" href="https://unpkg.com/vditor/dist/index.css"/>
+
+<style>
+body{margin:0;font-family:Arial;}
+.app{display:flex;height:100vh;}
+.sidebar{width:260px;background:#f5f5f5;display:flex;flex-direction:column;}
+.editor{flex:1;display:flex;flex-direction:column;}
+#vditor{flex:1;}
+.note-item{padding:10px;cursor:pointer;border-bottom:1px solid #ddd;}
+.note-item.active{background:#1677ff;color:#fff;}
+
+.export-menu{
+position:absolute;
+background:#fff;
+border:1px solid #ddd;
+display:none;
+z-index:1000;
+}
+.export-menu div{
+padding:8px 12px;
+cursor:pointer;
+}
+.export-menu div:hover{background:#eee;}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- 左侧 -->
+<div class="sidebar">
+  <button onclick="createNote()">+ 新建</button>
+  <button onclick="syncGitHub()">☁ 同步</button>
+  <button id="exportBtn">⬇ 导出</button>
+
+  <div id="list"></div>
+</div>
+
+<!-- 编辑区 -->
+<div class="editor">
+  <input id="title" placeholder="标题" style="padding:10px;font-size:18px;">
+  <div id="vditor"></div>
+</div>
+
+</div>
+
+<!-- 导出菜单 -->
+<div id="exportMenu" class="export-menu">
+  <div data-type="json">导出JSON</div>
+</div>
+
+<script src="./config.js"></script>
+<script src="https://unpkg.com/vditor/dist/index.min.js"></script>
+
+<script>
+
+let notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+let currentId = null;
+let editor;
+
+// ================= 工具 =================
+function saveLocal(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+}
+
+function renderList(){
+  const el = document.getElementById("list");
+  el.innerHTML = notes.map(n =>
+    `<div class="note-item ${n.id===currentId?'active':''}" onclick="openNote(${n.id})">
+      ${n.title || "无标题"}
+    </div>`
+  ).join("");
+}
+
+// ================= 笔记 =================
+function createNote(){
+  currentId = null;
+  document.getElementById("title").value = "";
+  editor.setValue("");
+  renderList();
+}
+
+function openNote(id){
+  const n = notes.find(x=>x.id===id);
+  if(!n) return;
+  currentId = id;
+  document.getElementById("title").value = n.title;
+  editor.setValue(n.content);
+  renderList();
+}
+
+function saveNote(){
+  const title = document.getElementById("title").value;
+  const content = editor.getValue();
+
+  if(currentId){
+    const n = notes.find(x=>x.id===currentId);
+    n.title = title;
+    n.content = content;
+  }else{
+    const n = {
+      id: Date.now(),
+      title,
+      content,
+      time: new Date().toLocaleString()
+    };
+    notes.unshift(n);
+    currentId = n.id;
+  }
+
+  saveLocal();
+  renderList();
+}
+
+// ================= 导出 =================
+function exportJSON(){
+  const blob = new Blob(
+    [JSON.stringify(notes, null, 2)],
+    {type:"application/json"}
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "smile_notes.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ================= GitHub 拉取（🔥新增核心） =================
+async function fetchGitHub(){
+
+  try{
+    const api = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
+
+    const res = await fetch(api, {
+      headers:{
+        Authorization:`token ${GITHUB_CONFIG.token}`
+      }
+    });
+
+    if(!res.ok){
+      console.log("GitHub无文件，使用本地数据");
+      return;
+    }
+
+    const data = await res.json();
+
+    // ⚠️ 关键：base64 + 中文兼容
+    const decoded = decodeURIComponent(escape(atob(data.content)));
+
+    const remote = JSON.parse(decoded);
+
+    if(Array.isArray(remote)){
+      notes = remote;
+      saveLocal();
+      console.log("已从GitHub加载数据");
+    }
+
+  }catch(e){
+    console.error("GitHub拉取失败", e);
+  }
+}
+
+// ================= GitHub 同步（push） =================
+async function syncGitHub(){
+
+  const payload = JSON.stringify(notes);
+
+  const res = await fetch("https://api.github.com/repos/smileinit111-creator/smile.github.io/dispatches", {
+    method: "POST",
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      event_type: "update-notes",
+      client_payload: {
+        notes: payload
+      }
+    })
+  });
+
+  if(res.ok){
+    alert("同步成功（GitHub Actions）");
+  }else{
+    alert("同步失败");
+  }
+}
+
+async function loadNotes(){
+
+  const res = await fetch("./notes.json?t=" + Date.now());
+  if(!res.ok) return;
+
+  const data = await res.json();
+
+  if(Array.isArray(data)){
+    notes = data;
+    saveLocal();
+  }
+}
+
+// ================= 初始化 =================
+window.onload = async ()=>{
+
+  await loadNotes();   // ⭐ 从 GitHub 读数据
+
+  editor = new Vditor("vditor",{
+    height:"100%",
+    mode:"ir",
+    input:saveNote
+  });
+
+  renderList();
+};
+
+</script>
+
+</body>
+</html>
